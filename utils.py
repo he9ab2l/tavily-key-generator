@@ -50,10 +50,10 @@ def save_api_key(email, api_key, password=None):
     print(f"  [saved] {email} | {api_key[:24]}...")
 
     # 自动上传到 Proxy
-    upload_to_proxy(api_key, email)
+    upload_to_proxy(api_key, email, pwd)
 
 
-def upload_to_proxy(api_key, email=""):
+def upload_to_proxy(api_key, email="", password=""):
     """将 API Key 上传到 Proxy 网关"""
     try:
         from config import PROXY_AUTO_UPLOAD, PROXY_URL, PROXY_ADMIN_PASSWORD
@@ -67,7 +67,7 @@ def upload_to_proxy(api_key, email=""):
     import json
 
     url = f"{PROXY_URL.rstrip('/')}/api/keys"
-    data = json.dumps({"key": api_key, "email": email}).encode()
+    data = json.dumps({"key": api_key, "email": email, "password": password}).encode()
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
     req.add_header("X-Admin-Password", PROXY_ADMIN_PASSWORD)

@@ -23,6 +23,7 @@ def init_db():
             id INTEGER PRIMARY KEY,
             key TEXT UNIQUE NOT NULL,
             email TEXT,
+            password TEXT DEFAULT '',
             active INTEGER DEFAULT 1,
             total_used INTEGER DEFAULT 0,
             total_failed INTEGER DEFAULT 0,
@@ -59,6 +60,11 @@ def init_db():
             value TEXT NOT NULL
         );
     """)
+    # 兼容旧库：补 password 列
+    try:
+        conn.execute("ALTER TABLE api_keys ADD COLUMN password TEXT DEFAULT ''")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -85,10 +91,10 @@ def set_setting(key, value):
 
 # ═══ API Keys ═══
 
-def add_key(key, email=""):
+def add_key(key, email="", password=""):
     conn = get_conn()
     try:
-        conn.execute("INSERT OR IGNORE INTO api_keys (key, email) VALUES (?, ?)", (key, email))
+        conn.execute("INSERT OR IGNORE INTO api_keys (key, email, password) VALUES (?, ?, ?)", (key, email, password))
         conn.commit()
         return conn.execute("SELECT * FROM api_keys WHERE key = ?", (key,)).fetchone()
     finally:
@@ -166,7 +172,8 @@ def import_keys_from_text(text):
             key = match.group(1)
             parts = line.split(",")
             email = parts[0] if len(parts) >= 3 else ""
-            add_key(key, email)
+            password = parts[1] if len(parts) >= 3 else ""
+            add_key(key, email, password)
             count += 1
     return count
 

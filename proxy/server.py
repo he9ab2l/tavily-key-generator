@@ -147,10 +147,27 @@ async def add_keys(request: Request, _=Depends(verify_admin)):
         pool.reload()
         return {"imported": count}
     elif "key" in body:
-        db.add_key(body["key"], body.get("email", ""))
+        db.add_key(body["key"], body.get("email", ""), body.get("password", ""))
         pool.reload()
         return {"ok": True}
     raise HTTPException(status_code=400, detail="Provide 'key' or 'file'")
+
+
+@app.get("/api/keys/export")
+async def export_keys(request: Request, _=Depends(verify_admin)):
+    """导出原始账户信息（完整 key、邮箱、密码）"""
+    count = int(request.query_params.get("count", 0))
+    fmt = request.query_params.get("format", "full")  # full / keys_only
+    keys = [dict(k) for k in db.get_all_keys()]
+    if count > 0:
+        keys = keys[:count]
+    if fmt == "keys_only":
+        lines = [k["key"] for k in keys]
+    else:
+        lines = []
+        for k in keys:
+            lines.append(f"{k['email']},{k.get('password','')},{k['key']},{k.get('created_at','')}")
+    return {"keys": keys, "text": "\n".join(lines), "count": len(keys)}
 
 
 @app.delete("/api/keys/{key_id}")

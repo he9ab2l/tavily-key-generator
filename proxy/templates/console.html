@@ -155,6 +155,22 @@ textarea { min-height: 80px; resize: vertical; }
     </div>
   </div>
 
+  <!-- Export -->
+  <div class="card">
+    <h2>账户提取</h2>
+    <p class="desc">导出原始账户信息（邮箱 / 密码 / 完整 Key），可自定义数量</p>
+    <div class="flex mt" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <input type="number" id="export-count" placeholder="数量（留空=全部）" min="1" style="max-width:160px">
+      <select id="export-format" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px">
+        <option value="full">完整信息（邮箱,密码,Key,时间）</option>
+        <option value="keys_only">仅 Key（一行一个）</option>
+      </select>
+      <button class="btn btn-primary" onclick="exportKeys()">提取</button>
+      <button class="btn" id="copy-export-btn" onclick="copyExport()" style="display:none">复制</button>
+    </div>
+    <textarea id="export-result" class="hidden mono" style="min-height:120px;background:#f8f8f8;font-size:13px" readonly></textarea>
+  </div>
+
 </div>
 </div>
 
@@ -412,6 +428,25 @@ function copyText(t) {
     const el = event.target;
     el.textContent = '已复制';
     setTimeout(() => el.textContent = '复制', 1500);
+  });
+}
+
+async function exportKeys() {
+  const count = document.getElementById('export-count').value || 0;
+  const fmt = document.getElementById('export-format').value;
+  const r = await api('GET', `/api/keys/export?count=${count}&format=${fmt}`);
+  const el = document.getElementById('export-result');
+  el.value = r.text;
+  el.classList.remove('hidden');
+  document.getElementById('copy-export-btn').style.display = 'inline-block';
+}
+
+function copyExport() {
+  const text = document.getElementById('export-result').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-export-btn');
+    btn.textContent = '已复制';
+    setTimeout(() => btn.textContent = '复制', 1500);
   });
 }
 
