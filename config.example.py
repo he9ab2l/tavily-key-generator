@@ -1,61 +1,56 @@
 """
-配置文件 - 复制为 config.py 并填写你的信息
+配置文件模板 - 复制为 config.py 并填写你的信息
 cp config.example.py config.py
 """
 
-# ═══════════════════════════════════════════════════
-#  必填项（只需填这几项就能运行）
-# ═══════════════════════════════════════════════════
-
-# 邮箱后端: "cloudflare" 或 "duckmail"
+# === 邮箱后端 ===
+# 可选: "cloudflare" 或 "duckmail"
 EMAIL_PROVIDER = "cloudflare"
 
-# Cloudflare 邮箱配置
-EMAIL_DOMAIN = ""           # 你的域名，如 example.com
-EMAIL_API_URL = ""          # Email Worker URL，如 https://mail.example.com
+# --- Cloudflare Email Worker ---
+EMAIL_DOMAIN = ""           # 你的域名, 如 example.com
+EMAIL_PREFIX = "tavily"     # 邮箱前缀, 生成如 tavily-abc12345@example.com
+EMAIL_API_URL = ""          # Email Worker URL, 如 https://mail.example.com
 EMAIL_API_TOKEN = ""        # Email Worker API Token
 
-# ═══════════════════════════════════════════════════
-#  网关连接（填了自动上传 Key 到远程 Proxy）
-# ═══════════════════════════════════════════════════
-
-PROXY_AUTO_UPLOAD = False
-PROXY_URL = ""              # 如 https://tav.example.com
-PROXY_ADMIN_PASSWORD = ""   # Proxy 管理密码
-
-# ═══════════════════════════════════════════════════
-#  以下为可选项，一般不用改
-# ═══════════════════════════════════════════════════
-
-EMAIL_PREFIX = "tavily"     # 邮箱前缀
-
-# DuckMail（仅 EMAIL_PROVIDER = "duckmail" 时需要）
+# --- DuckMail ---
 DUCKMAIL_API_BASE = "https://api.duckmail.sbs"
-DUCKMAIL_BEARER = ""
+DUCKMAIL_BEARER = ""        # DuckMail API Key (dk_xxx)
 DUCKMAIL_DOMAIN = "duckmail.sbs"
 
-# 验证码: "browser"(免费推荐) / "capsolver"(付费) / "turnstile-solver"(本地)
+# === 验证码 ===
+# 可选: "browser" (免费推荐) / "capsolver" (付费) / "turnstile-solver" (本地)
 CAPTCHA_SOLVER = "browser"
 CAPSOLVER_API_KEY = ""
 TURNSTILE_SOLVER_URL = "http://127.0.0.1:5000"
 
-# 注册
-DEFAULT_PASSWORD = ""       # 留空 = 每次随机生成
-API_KEYS_FILE = "api_keys.md"
-API_KEYS_TXT = "api_keys.txt"
+# === 注册配置 ===
+DEFAULT_PASSWORD = ""       # 留空 = 每次自动生成随机密码
+COOLDOWN_SECONDS = 45       # 两次注册间隔 (秒), 可调低到30
+MAX_THREADS = 2             # 最大并行线程数
 
-# 等待时间（秒）
-WAIT_TIME_SHORT = 2
-WAIT_TIME_MEDIUM = 5
-WAIT_TIME_LONG = 10
-EMAIL_CHECK_INTERVAL = 10
-MAX_EMAIL_WAIT_TIME = 300
+# === 文件输出 ===
+API_KEYS_FILE = "api_keys.md"   # 完整账户信息 (MD表格)
+API_KEYS_TXT = "api_keys.txt"   # 纯 Key 列表 (一行一个)
 
-# 浏览器
-HEADLESS = False
-BROWSER_TIMEOUT = 30000
-BROWSER_TYPE = "firefox"
+# === 等待时间 (秒) ===
+WAIT_TIME_SHORT = 1
+WAIT_TIME_MEDIUM = 3
+WAIT_TIME_LONG = 8
+EMAIL_CHECK_INTERVAL = 8
+MAX_EMAIL_WAIT_TIME = 180   # 3分钟
 
-# Tavily URL（一般不用改）
+# === 浏览器 ===
+HEADLESS = False            # True = 后台运行
+BROWSER_TIMEOUT = 30000     # 毫秒
+BROWSER_TYPE = "firefox"    # 回退浏览器 (优先使用 patchright chromium)
+
+# === 代理网关 ===
+PROXY_AUTO_UPLOAD = False
+PROXY_URL = ""              # 如 https://tav.example.com 或 http://localhost:9874
+PROXY_ADMIN_PASSWORD = ""
+UPLOAD_RETRY = 3            # 上传失败重试次数
+
+# === Tavily ===
 TAVILY_HOME_URL = "https://app.tavily.com/home"
 TAVILY_SIGNUP_URL = "https://app.tavily.com/home"

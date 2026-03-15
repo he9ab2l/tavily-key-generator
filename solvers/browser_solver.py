@@ -1,20 +1,17 @@
-#!/usr/bin/env python3
 """
-浏览器原生 Turnstile 验证码解决器（免费）
+浏览器原生 Turnstile 验证码解决器 (免费)
 通过在真实浏览器中点击 Turnstile 复选框来通过验证
 """
 import time
+import logger as log
 
 
 def solve_turnstile_browser(page, timeout=30):
     """
     在浏览器中直接解决 Turnstile 验证
-    1. 找到 Turnstile iframe
-    2. 点击复选框
-    3. 等待验证通过（cf-turnstile-response 填充）
     返回 True/False
     """
-    print("🔐 [免费模式] 尝试浏览器内解决 Turnstile...")
+    log.info("[turnstile] browser solver: checking...")
 
     # 等待 Turnstile iframe 出现
     has_iframe = False
@@ -25,28 +22,24 @@ def solve_turnstile_browser(page, timeout=30):
         )
         has_iframe = True
     except Exception:
-        # iframe 未检测到，但可能是 invisible 模式
-        # 检查页面是否有 captcha hidden input（说明 Turnstile 存在但是 invisible）
         has_captcha = page.evaluate("""() => {
             const el = document.querySelector('[name="captcha"], [name="cf-turnstile-response"]');
             return el ? true : false;
         }""")
         if not has_captcha:
-            print("✅ 未检测到 Turnstile，跳过")
+            log.info("[turnstile] not detected, skip")
             return True
-        print("⚠️ 检测到隐式 Turnstile，等待自动验证...")
+        log.info("[turnstile] invisible mode detected, waiting...")
 
-    time.sleep(3)
+    time.sleep(2)
 
-    # 尝试在 iframe 中点击复选框（仅在有 iframe 时）
+    # 尝试在 iframe 中点击复选框
     clicked = False
     if has_iframe:
         for frame in page.frames:
             if "challenges.cloudflare.com" not in frame.url:
                 continue
-
             try:
-                # Turnstile 复选框常见选择器
                 selectors = [
                     'input[type="checkbox"]',
                     '[role="checkbox"]',
@@ -58,21 +51,20 @@ def solve_turnstile_browser(page, timeout=30):
                         cb = frame.wait_for_selector(sel, timeout=3000)
                         if cb:
                             cb.click()
-                            print(f"✅ 已点击 Turnstile 复选框: {sel}")
+                            log.success(f"[turnstile] clicked checkbox: {sel}")
                             clicked = True
                             break
                     except Exception:
                         continue
             except Exception:
                 continue
-
             if clicked:
                 break
 
         if not clicked:
-            print("⚠️ 未找到可点击的复选框，等待自动验证...")
+            log.info("[turnstile] no checkbox found, waiting for auto-verify...")
 
-    # 等待 cf-turnstile-response 被填充（验证通过的标志）
+    # 等待 cf-turnstile-response 被填充
     try:
         page.wait_for_function(
             """
@@ -88,8 +80,8 @@ def solve_turnstile_browser(page, timeout=30):
             """,
             timeout=timeout * 1000,
         )
-        print("✅ Turnstile 验证已通过!")
+        log.success("[turnstile] passed")
         return True
     except Exception:
-        print("❌ Turnstile 验证超时")
+        log.error("[turnstile] timeout")
         return False

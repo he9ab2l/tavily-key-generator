@@ -24,6 +24,7 @@ def init_db():
             key TEXT UNIQUE NOT NULL,
             email TEXT,
             password TEXT DEFAULT '',
+            exported INTEGER DEFAULT 0,
             active INTEGER DEFAULT 1,
             total_used INTEGER DEFAULT 0,
             total_failed INTEGER DEFAULT 0,
@@ -60,11 +61,12 @@ def init_db():
             value TEXT NOT NULL
         );
     """)
-    # 兼容旧库：补 password 列
-    try:
-        conn.execute("ALTER TABLE api_keys ADD COLUMN password TEXT DEFAULT ''")
-    except Exception:
-        pass
+    # 兼容旧库：补列
+    for col, default in [("password", "''"), ("exported", "0")]:
+        try:
+            conn.execute(f"ALTER TABLE api_keys ADD COLUMN {col} TEXT DEFAULT {default}")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -105,6 +107,82 @@ def get_all_keys():
     conn = get_conn()
     try:
         return conn.execute("SELECT * FROM api_keys ORDER BY id").fetchall()
+    finally:
+        conn.close()
+
+
+def get_keys_page(page=1, per_page=10):
+    """分页获取 keys"""
+    conn = get_conn()
+    try:
+        total = conn.execute("SELECT COUNT(*) as c FROM api_keys").fetchone()["c"]
+        offset = (page - 1) * per_page
+        rows = conn.execute(
+            "SELECT * FROM api_keys ORDER BY id DESC LIMIT ? OFFSET ?",
+            (per_page, offset)
+        ).fetchall()
+        return {
+            "keys": [dict(r) for r in rows],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page,
+        }
+    finally:
+        conn.close()
+
+
+def export_unexported_keys(count=0, fmt="full"):
+    """导出未导出过的 key，并标记为已导出"""
+    conn = get_conn()
+    try:
+        sql = "SELECT * FROM api_keys WHERE exported = 0 ORDER BY id"
+        if count > 0:
+            sql += f" LIMIT {int(count)}"
+        rows = conn.execute(sql).fetchall()
+        keys = [dict(r) for r in rows]
+        # 标记为已导出
+        if keys:
+            ids = [k["id"] for k in keys]
+            placeholders = ",".join("?" * len(ids))
+            conn.execute(f"UPDATE api_keys SET exported = 1 WHERE id IN ({placeholders})", ids)
+            conn.commit()
+        # 统计
+        total = conn.execute("SELECT COUNT(*) as c FROM api_keys").fetchone()["c"]
+        exported_count = conn.execute("SELECT COUNT(*) as c FROM api_keys WHERE exported = 1").fetchone()["c"]
+        unexported_count = conn.execute("SELECT COUNT(*) as c FROM api_keys WHERE exported = 0").fetchone()["c"]
+        active_count = conn.execute("SELECT COUNT(*) as c FROM api_keys WHERE active = 1").fetchone()["c"]
+        return {
+            "keys": keys,
+            "exported_now": len(keys),
+            "total": total,
+            "exported_total": exported_count,
+            "unexported": unexported_count,
+            "active": active_count,
+        }
+    finally:
+        conn.close()
+
+
+def reset_export_flags():
+    """重置所有导出标记"""
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE api_keys SET exported = 0")
+        conn.commit()
+        return conn.execute("SELECT COUNT(*) as c FROM api_keys").fetchone()["c"]
+    finally:
+        conn.close()
+
+
+def get_export_stats():
+    """获取导出统计"""
+    conn = get_conn()
+    try:
+        total = conn.execute("SELECT COUNT(*) as c FROM api_keys").fetchone()["c"]
+        exported = conn.execute("SELECT COUNT(*) as c FROM api_keys WHERE exported = 1").fetchone()["c"]
+        active = conn.execute("SELECT COUNT(*) as c FROM api_keys WHERE active = 1").fetchone()["c"]
+        return {"total": total, "exported": exported, "unexported": total - exported, "active": active}
     finally:
         conn.close()
 

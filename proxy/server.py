@@ -131,12 +131,13 @@ async def stats(request: Request, _=Depends(verify_admin)):
 
 @app.get("/api/keys")
 async def list_keys(request: Request, _=Depends(verify_admin)):
-    keys = [dict(k) for k in db.get_all_keys()]
-    for k in keys:
-        # 脱敏显示
+    page = int(request.query_params.get("page", 1))
+    per_page = int(request.query_params.get("per_page", 10))
+    data = db.get_keys_page(page, per_page)
+    for k in data["keys"]:
         raw = k["key"]
         k["key_masked"] = raw[:8] + "***" + raw[-4:] if len(raw) > 12 else raw
-    return {"keys": keys}
+    return data
 
 
 @app.post("/api/keys")
@@ -155,19 +156,31 @@ async def add_keys(request: Request, _=Depends(verify_admin)):
 
 @app.get("/api/keys/export")
 async def export_keys(request: Request, _=Depends(verify_admin)):
-    """导出原始账户信息（完整 key、邮箱、密码）"""
+    """导出未导出过的账户信息（去重）"""
     count = int(request.query_params.get("count", 0))
-    fmt = request.query_params.get("format", "full")  # full / keys_only
-    keys = [dict(k) for k in db.get_all_keys()]
-    if count > 0:
-        keys = keys[:count]
+    fmt = request.query_params.get("format", "full")
+    data = db.export_unexported_keys(count, fmt)
     if fmt == "keys_only":
-        lines = [k["key"] for k in keys]
+        lines = [k["key"] for k in data["keys"]]
     else:
         lines = []
-        for k in keys:
+        for k in data["keys"]:
             lines.append(f"{k['email']},{k.get('password','')},{k['key']},{k.get('created_at','')}")
-    return {"keys": keys, "text": "\n".join(lines), "count": len(keys)}
+    data["text"] = "\n".join(lines)
+    return data
+
+
+@app.get("/api/keys/export-stats")
+async def export_stats(request: Request, _=Depends(verify_admin)):
+    """获取导出统计"""
+    return db.get_export_stats()
+
+
+@app.post("/api/keys/export-reset")
+async def export_reset(request: Request, _=Depends(verify_admin)):
+    """重置导出标记"""
+    total = db.reset_export_flags()
+    return {"ok": True, "reset": total}
 
 
 @app.delete("/api/keys/{key_id}")

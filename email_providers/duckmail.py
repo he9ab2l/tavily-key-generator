@@ -1,13 +1,12 @@
-#!/usr/bin/env python3
 """
 DuckMail 临时邮箱后端
-API: https://api.duckmail.sbs
 """
 import random
 import string
 import requests
 from config import DUCKMAIL_API_BASE, DUCKMAIL_BEARER, DUCKMAIL_DOMAIN
 from .base import EmailProvider
+import logger as log
 
 
 class DuckMailProvider(EmailProvider):
@@ -16,7 +15,6 @@ class DuckMailProvider(EmailProvider):
     def __init__(self):
         self.api_base = DUCKMAIL_API_BASE.rstrip("/")
         self.admin_headers = {"Authorization": f"Bearer {DUCKMAIL_BEARER}"}
-        # 每个邮箱有独立的 mail_token，用 address -> token 映射
         self._mail_tokens = {}
 
     def create_email(self, prefix=None):
@@ -29,7 +27,6 @@ class DuckMailProvider(EmailProvider):
 
         password = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
 
-        # 1. 创建账号
         resp = requests.post(
             f"{self.api_base}/accounts",
             json={"address": address, "password": password},
@@ -37,36 +34,34 @@ class DuckMailProvider(EmailProvider):
             timeout=15,
         )
         if resp.status_code not in [200, 201]:
-            raise Exception(f"DuckMail 创建邮箱失败: {resp.status_code} - {resp.text[:200]}")
+            raise Exception(f"DuckMail create failed: {resp.status_code} - {resp.text[:200]}")
 
-        # 2. 获取邮箱读取 token
         token_resp = requests.post(
             f"{self.api_base}/token",
             json={"address": address, "password": password},
             timeout=15,
         )
         if token_resp.status_code != 200:
-            raise Exception(f"DuckMail 获取 token 失败: {token_resp.status_code}")
+            raise Exception(f"DuckMail get token failed: {token_resp.status_code}")
 
         mail_token = token_resp.json().get("token")
         if not mail_token:
-            raise Exception("DuckMail 返回的 token 为空")
+            raise Exception("DuckMail token is empty")
 
         self._mail_tokens[address] = mail_token
-        print(f"✅ DuckMail 邮箱已创建: {address}")
+        log.info(f"[duckmail] created: {address}")
         return address
 
     def get_messages(self, address):
-        """获取邮件列表（含正文）"""
+        """获取邮件列表"""
         mail_token = self._mail_tokens.get(address)
         if not mail_token:
-            print(f"❌ 未找到 {address} 的 mail_token")
+            log.error(f"[duckmail] no token for {address}")
             return []
 
         headers = {"Authorization": f"Bearer {mail_token}"}
 
         try:
-            # 获取邮件列表
             resp = requests.get(
                 f"{self.api_base}/messages",
                 headers=headers,
@@ -78,13 +73,11 @@ class DuckMailProvider(EmailProvider):
             data = resp.json()
             message_list = data.get("hydra:member") or data.get("member") or data.get("data") or []
 
-            # 逐条获取邮件详情（列表接口不含正文）
             messages = []
             for item in message_list:
                 msg_id = item.get("id") or item.get("@id", "").split("/")[-1]
                 if not msg_id:
                     continue
-
                 detail = self._fetch_message_detail(headers, msg_id)
                 if detail:
                     messages.append(detail)
@@ -92,7 +85,7 @@ class DuckMailProvider(EmailProvider):
             return messages
 
         except Exception as e:
-            print(f"❌ 获取邮件失败: {e}")
+            log.error(f"[duckmail] get messages failed: {e}")
             return []
 
     def _fetch_message_detail(self, headers, msg_id):
@@ -110,5 +103,5 @@ class DuckMailProvider(EmailProvider):
         return None
 
     def cleanup(self, address):
-        """DuckMail 临时邮箱自动过期，无需清理"""
+        """DuckMail 临时邮箱自动过期"""
         pass

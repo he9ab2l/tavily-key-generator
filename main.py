@@ -1,26 +1,44 @@
 #!/usr/bin/env python3
 """
 Tavily API Key 自动注册工具
-支持多线程并行注册，带冷却间隔避免风控
+支持多线程并行注册, Ctrl+C 优雅退出, 数据实时保存
 """
 import sys
 import time
+import signal
 import random
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from intelligent_tavily_automation import IntelligentTavilyAutomation
-from config import EMAIL_PREFIX, CAPTCHA_SOLVER
-import config
 
-# 统计
+import logger as log
+import config
+from config import EMAIL_PREFIX, CAPTCHA_SOLVER
+from automation import TavilyAutomation
+from utils import sync_key_files
+
+# 全局状态
 lock = threading.Lock()
 success_count = 0
 fail_count = 0
 
-# 全局速率控制
+# 优雅退出
+shutdown_event = threading.Event()
+
+# 速率控制
 rate_lock = threading.Lock()
 last_start_time = 0
-COOLDOWN = 45
+
+
+def signal_handler(sig, frame):
+    """Ctrl+C 处理: 设置退出标志, 等待当前任务完成"""
+    if shutdown_event.is_set():
+        log.warn("[main] force quit")
+        sys.exit(1)
+    log.warn("[main] Ctrl+C received, finishing current tasks...")
+    shutdown_event.set()
+
+
+signal.signal(signal.SIGINT, signal_handler)
 
 
 def detect_backends():
@@ -42,32 +60,33 @@ def detect_backends():
 def choose_backend(backends):
     """选择邮箱后端"""
     if len(backends) == 0:
-        print("  [!] 未配置任何邮箱后端，请先编辑 config.py")
+        log.error("[main] no email backend configured, edit config.py first")
         sys.exit(1)
     if len(backends) == 1:
-        print(f"  邮箱后端  {backends[0]['label']}")
+        log.info(f"[main] email backend: {backends[0]['label']}")
         return backends[0]['name']
 
-    print("  可用邮箱后端:")
+    print("\n  available backends:")
     for i, b in enumerate(backends, 1):
         print(f"    {i}. {b['label']}")
     while True:
-        choice = input("  选择 (默认 1): ").strip()
+        choice = input("  choose (default 1): ").strip()
         if choice == '':
             return backends[0]['name']
         if choice.isdigit() and 1 <= int(choice) <= len(backends):
             return backends[int(choice) - 1]['name']
-        print("  [!] 无效选择")
+        print("  invalid choice")
 
 
 def wait_for_cooldown():
-    """全局速率控制"""
+    """速率控制"""
     global last_start_time
+    cooldown = getattr(config, 'COOLDOWN_SECONDS', 45)
     with rate_lock:
         now = time.time()
-        wait = COOLDOWN - (now - last_start_time)
+        wait = cooldown - (now - last_start_time)
         if wait > 0:
-            wait += random.uniform(0, 10)
+            wait += random.uniform(0, 5)
             time.sleep(wait)
         last_start_time = time.time()
 
@@ -76,15 +95,21 @@ def register_one(task_id, total, provider_name):
     """单个注册任务"""
     global success_count, fail_count
 
+    if shutdown_event.is_set():
+        return None
+
     wait_for_cooldown()
 
+    if shutdown_event.is_set():
+        return None
+
     with lock:
-        print(f"\n  [{task_id}/{total}] 开始注册...")
+        log.info(f"[{task_id}/{total}] starting registration...")
 
     automation = None
     try:
         config.EMAIL_PROVIDER = provider_name
-        automation = IntelligentTavilyAutomation()
+        automation = TavilyAutomation()
         automation.email_prefix = EMAIL_PREFIX
         automation.start_browser(headless=config.HEADLESS)
 
@@ -95,69 +120,86 @@ def register_one(task_id, total, provider_name):
         with lock:
             if api_key:
                 success_count += 1
-                print(f"  [{task_id}/{total}] OK  {automation.email}  {api_key[:24]}...  {elapsed:.0f}s")
+                log.success(f"[{task_id}/{total}] OK  {automation.email}  {api_key[:24]}...  {elapsed:.0f}s")
             else:
                 fail_count += 1
-                print(f"  [{task_id}/{total}] FAIL  {elapsed:.0f}s")
+                log.error(f"[{task_id}/{total}] FAIL  {elapsed:.0f}s")
 
         return api_key
 
     except Exception as e:
         with lock:
             fail_count += 1
-            print(f"  [{task_id}/{total}] ERR  {e}")
+            log.error(f"[{task_id}/{total}] ERROR: {e}")
         return None
     finally:
         if automation:
             try:
                 automation.close_browser()
-            except:
+            except Exception:
                 pass
+
+
+def print_summary(elapsed):
+    """打印结果摘要"""
+    print()
+    print("  " + "-" * 45)
+    print(f"  done in {elapsed:.0f}s")
+    print(f"  success: {success_count}  |  fail: {fail_count}  |  total: {success_count + fail_count}")
+    print(f"  keys saved to: {config.API_KEYS_FILE} + {config.API_KEYS_TXT}")
+    print("  " + "-" * 45)
+    print()
 
 
 def main():
     global success_count, fail_count
 
     print()
-    print("  ╔══════════════════════════════════════════╗")
-    print("  ║       Tavily Key Auto-Register           ║")
-    print("  ╚══════════════════════════════════════════╝")
-    print()
+    print("  Tavily Key Auto-Register")
+    print("  " + "-" * 30)
 
     backends = detect_backends()
     provider_name = choose_backend(backends)
 
-    solver_label = {"browser": "Browser (免费)", "capsolver": "CapSolver (API)", "turnstile-solver": "Turnstile-Solver"}
-    print(f"  验证码    {solver_label.get(CAPTCHA_SOLVER, CAPTCHA_SOLVER)}")
-    print(f"  密码模式  {'固定' if config.DEFAULT_PASSWORD else '随机生成'}")
-    print()
+    pwd_mode = "random" if not config.DEFAULT_PASSWORD else "fixed"
+    log.info(f"[main] captcha: {CAPTCHA_SOLVER}")
+    log.info(f"[main] password: {pwd_mode}")
 
-    count_input = input("  注册数量 (默认 10): ").strip()
+    # 先同步已有的 key 文件
+    sync_key_files()
+
+    max_threads = getattr(config, 'MAX_THREADS', 2)
+    cooldown = getattr(config, 'COOLDOWN_SECONDS', 45)
+
+    count_input = input(f"\n  register count (default 10): ").strip()
     count = int(count_input) if count_input.isdigit() and int(count_input) > 0 else 10
 
-    threads_input = input("  并行线程 (默认 2): ").strip()
-    threads = int(threads_input) if threads_input.isdigit() and int(threads_input) > 0 else 2
+    threads_input = input(f"  threads (default {max_threads}): ").strip()
+    threads = int(threads_input) if threads_input.isdigit() and int(threads_input) > 0 else max_threads
     threads = min(threads, count)
 
     print()
-    print(f"  ── 开始注册 ──────────────────────────────")
-    print(f"  目标 {count} 个 | 线程 {threads} | 间隔 {COOLDOWN}s")
+    log.info(f"[main] target: {count} | threads: {threads} | cooldown: {cooldown}s")
+    print("  press Ctrl+C to stop gracefully")
+    print()
 
     success_count = 0
     fail_count = 0
     start_time = time.time()
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
-        futures = [executor.submit(register_one, i, count, provider_name) for i in range(1, count + 1)]
+        futures = []
+        for i in range(1, count + 1):
+            if shutdown_event.is_set():
+                break
+            futures.append(executor.submit(register_one, i, count, provider_name))
+
         for future in as_completed(futures):
-            pass
+            if shutdown_event.is_set():
+                break
 
     elapsed = time.time() - start_time
-    print()
-    print(f"  ── 完成 ──────────────────────────────────")
-    print(f"  耗时 {elapsed:.0f}s | 成功 {success_count} | 失败 {fail_count}")
-    print(f"  保存 api_keys.md + api_keys.txt")
-    print()
+    print_summary(elapsed)
 
 
 if __name__ == "__main__":

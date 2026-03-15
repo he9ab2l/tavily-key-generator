@@ -5,28 +5,14 @@ __pycache__/
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
-MANIFEST
 
 # Virtual Environment
 venv/
 env/
 ENV/
-env.bak/
-venv.bak/
 
 # IDE
 .vscode/
@@ -37,31 +23,22 @@ venv.bak/
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Project specific
+# Project secrets
 config.py
 .env
+
+# Generated data
 api_keys.md
 api_keys.txt
-results.json
-*.png
-*.jpg
-*.jpeg
-*.gif
-!docs/*.jpg
-*.log
+logs/
 
 # Playwright
 test-results/
 playwright-report/
 playwright/.cache/
 
-# Proxy
+# Proxy runtime
 proxy/data/
 proxy/.env
