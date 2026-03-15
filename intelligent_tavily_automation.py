@@ -109,7 +109,7 @@ class IntelligentTavilyAutomation:
         """调试日志"""
         if self.debug:
             timestamp = time.strftime("%H:%M:%S")
-            print(f"[{timestamp}] {level}: {message}")
+            print(f"  [{timestamp}] {message}")
     
     def start_browser(self, headless=None):
         """启动浏览器"""
@@ -126,15 +126,15 @@ class IntelligentTavilyAutomation:
                 headless=headless_mode,
                 args=['--ignore-certificate-errors'],
             )
-            self.log("✅ 使用 patchright chromium（反检测模式）")
+            self.log("浏览器 patchright chromium")
         except ImportError:
-            # 回退到普通 playwright
             if BROWSER_TYPE == "firefox":
                 self.browser = self.playwright.firefox.launch(headless=headless_mode)
             elif BROWSER_TYPE == "webkit":
                 self.browser = self.playwright.webkit.launch(headless=headless_mode)
             else:
                 self.browser = self.playwright.chromium.launch(headless=headless_mode)
+            self.log(f"浏览器 {BROWSER_TYPE}")
 
         context = self.browser.new_context(ignore_https_errors=True)
         self.page = context.new_page()
@@ -143,16 +143,12 @@ class IntelligentTavilyAutomation:
         # 仅在非 patchright 时应用 stealth 补丁
         try:
             from patchright.sync_api import sync_playwright as _check
-            self.log("✅ patchright 已内建反检测，无需额外补丁")
         except ImportError:
             try:
                 from playwright_stealth import stealth_sync
                 stealth_sync(self.page)
-                self.log("✅ 已应用浏览器反检测补丁")
-            except ImportError:
-                self.log("⚠️ playwright-stealth 未安装，跳过反检测")
-            except Exception as e:
-                self.log(f"⚠️ 反检测补丁应用失败: {e}")
+            except Exception:
+                pass
     
     def close_browser(self):
         """关闭浏览器"""
@@ -179,26 +175,19 @@ class IntelligentTavilyAutomation:
         # 首先尝试主要选择器
         for selector in primary_selectors:
             try:
-                self.log(f"🔍 尝试主要选择器: {selector}")
                 element = self.page.wait_for_selector(selector, timeout=timeout//len(primary_selectors))
                 if element:
-                    self.log(f"✅ 找到元素: {selector}")
                     return element, selector
             except Exception as e:
-                self.log(f"❌ 主要选择器失败: {selector}")
                 continue
-        
+
         # 如果主要选择器都失败，尝试备用选择器
-        self.log("⚠️ 主要选择器都失败，尝试备用选择器...")
         for selector in fallback_selectors:
             try:
-                self.log(f"🔍 尝试备用选择器: {selector}")
                 element = self.page.wait_for_selector(selector, timeout=timeout//len(fallback_selectors))
                 if element:
-                    self.log(f"✅ 找到元素（备用）: {selector}")
                     return element, selector
             except Exception as e:
-                self.log(f"❌ 备用选择器失败: {selector}")
                 continue
         
         return None, None
@@ -211,36 +200,23 @@ class IntelligentTavilyAutomation:
             return False
         
         for attempt in range(retries):
-            self.log(f"🔄 尝试点击 {element_name} (第 {attempt+1}/{retries} 次)")
-            
             element, selector = self.smart_wait_for_element(element_config)
-            
+
             if element:
                 try:
-                    # 确保元素可见和稳定
                     element.wait_for_element_state('visible', timeout=5000)
                     element.wait_for_element_state('stable', timeout=5000)
-                    
-                    # 点击元素
                     element.click()
-                    self.log(f"✅ 成功点击 {element_name}")
-
-                    # 增加1秒延迟确保操作稳定
                     time.sleep(1)
-
-                    # 等待页面响应
                     try:
                         self.page.wait_for_load_state('networkidle', timeout=10000)
                     except:
                         pass
                     return True
-                    
                 except Exception as e:
-                    self.log(f"❌ 点击失败: {e}")
-            
-            # 如果失败，刷新页面重试
+                    self.log(f"点击 {element_name} 失败: {e}")
+
             if attempt < retries - 1:
-                self.log("🔄 刷新页面后重试...")
                 self.page.reload(wait_until='domcontentloaded')
                 try:
                     self.page.wait_for_load_state('networkidle', timeout=10000)
@@ -259,37 +235,22 @@ class IntelligentTavilyAutomation:
             return False
         
         for attempt in range(retries):
-            self.log(f"🔄 尝试填写 {element_name} (第 {attempt+1}/{retries} 次)")
-            
             element, selector = self.smart_wait_for_element(element_config)
-            
+
             if element:
                 try:
-                    # 确保元素可见和可编辑
                     element.wait_for_element_state('visible', timeout=5000)
                     element.wait_for_element_state('editable', timeout=5000)
-                    
-                    # 清空并填写
-                    element.fill('')  # 先清空
+                    element.fill('')
                     element.fill(text)
-                    
-                    # 增加1秒延迟确保填写稳定
                     time.sleep(1)
-
-                    # 验证填写结果
                     filled_value = element.input_value()
                     if filled_value == text:
-                        self.log(f"✅ 成功填写 {element_name}: {text}")
                         return True
-                    else:
-                        self.log(f"⚠️ 填写验证失败: 期望 '{text}', 实际 '{filled_value}'")
-                        
                 except Exception as e:
-                    self.log(f"❌ 填写失败: {e}")
-            
-            # 如果失败，刷新页面重试
+                    self.log(f"填写 {element_name} 失败: {e}")
+
             if attempt < retries - 1:
-                self.log("🔄 刷新页面后重试...")
                 self.page.reload(wait_until='domcontentloaded')
                 try:
                     self.page.wait_for_load_state('networkidle', timeout=10000)
@@ -303,8 +264,7 @@ class IntelligentTavilyAutomation:
     def navigate_to_signup(self):
         """导航到注册页面"""
         try:
-            # 方案1（最可靠）：直接访问 Auth0 authorize 端点，跳过 SPA
-            self.log("🌐 直接访问 Auth0 注册页面...")
+            self.log("导航到注册页面...")
             auth_url = (
                 "https://auth.tavily.com/authorize"
                 "?response_type=code"
@@ -318,11 +278,9 @@ class IntelligentTavilyAutomation:
 
             # 检查是否到达了注册页面
             if "auth.tavily.com" in self.page.url:
-                self.log(f"✅ 已到达 Auth0 注册页面: {self.page.url}")
                 return True
 
-            # 方案2：回退到原始方式
-            self.log("⚠️ Auth0 直达失败，尝试通过 app.tavily.com...")
+            self.log("Auth0 直达失败，回退...")
             self.page.goto(TAVILY_HOME_URL, wait_until='domcontentloaded', timeout=60000)
             for _ in range(10):
                 time.sleep(2)
@@ -330,47 +288,40 @@ class IntelligentTavilyAutomation:
                     break
 
             if self.smart_click('signup_button'):
-                self.log("✅ 成功导航到注册页面")
                 return True
 
-            self.log("⚠️ 未找到Sign Up按钮，尝试直接访问注册页面...")
             self.page.goto(TAVILY_SIGNUP_URL, wait_until='domcontentloaded', timeout=60000)
             return True
 
         except Exception as e:
-            self.log(f"❌ 导航到注册页面失败: {e}")
+            self.log(f"导航失败: {e}")
             return False
     
     def fill_registration_form(self):
         """填写注册表单"""
         try:
-            # 通过 provider 创建邮箱
             self.email = self.provider.create_email(self.email_prefix)
-            self.log(f"📧 注册邮箱: {self.email}")
+            self.log(f"邮箱 {self.email}")
 
-            # 智能填写邮箱
             if not self.smart_fill('email_input', self.email):
                 return False
 
-            # 先解决 Turnstile，再点 Continue
             if not self.solve_turnstile_if_present():
-                self.log("⚠️ Turnstile 解决失败，尝试继续...")
+                self.log("Turnstile 失败，尝试继续...")
 
-            # 智能点击继续按钮
             if not self.smart_click('continue_button'):
                 return False
 
-            self.log("✅ 注册表单填写完成")
             return True
 
         except Exception as e:
-            self.log(f"❌ 填写注册表单失败: {e}")
+            self.log(f"注册表单失败: {e}")
             return False
 
     def solve_turnstile_if_present(self):
         """检测并解决 Cloudflare Turnstile 验证"""
         try:
-            self.log("🔍 检查是否有 Turnstile 验证...")
+            self.log("检查 Turnstile...")
             time.sleep(5)
 
             if CAPTCHA_SOLVER == "browser":
@@ -383,17 +334,16 @@ class IntelligentTavilyAutomation:
 
                 sitekey = extract_sitekey_from_page(self.page)
                 if not sitekey:
-                    self.log("✅ 未检测到 Turnstile，跳过")
                     return True
 
-                self.log(f"⚠️ 检测到 Turnstile! sitekey: {sitekey[:20]}...")
+                self.log(f"Turnstile sitekey: {sitekey[:20]}...")
 
                 current_url = self.page.url
                 from config import TURNSTILE_SOLVER_URL
                 token = solve_turnstile_via_api(TURNSTILE_SOLVER_URL, current_url, sitekey)
 
                 if not token:
-                    self.log("❌ Turnstile 解决失败")
+                    self.log("Turnstile 解决失败")
                     return False
 
                 inject_turnstile_token(self.page, token)
@@ -404,7 +354,7 @@ class IntelligentTavilyAutomation:
                 except:
                     pass
 
-                self.log("✅ Turnstile 验证已通过")
+                self.log("Turnstile OK")
                 return True
             else:
                 # 付费模式：CapSolver API
@@ -412,16 +362,15 @@ class IntelligentTavilyAutomation:
 
                 sitekey = extract_turnstile_sitekey(self.page)
                 if not sitekey:
-                    self.log("✅ 未检测到 Turnstile，跳过")
                     return True
 
-                self.log(f"⚠️ 检测到 Turnstile! sitekey: {sitekey[:20]}...")
+                self.log(f"Turnstile sitekey: {sitekey[:20]}...")
 
                 current_url = self.page.url
                 token = solve_turnstile(current_url, sitekey)
 
                 if not token:
-                    self.log("❌ Turnstile 解决失败")
+                    self.log("Turnstile 解决失败")
                     return False
 
                 inject_turnstile_token(self.page, token)
@@ -432,118 +381,83 @@ class IntelligentTavilyAutomation:
                 except:
                     pass
 
-                self.log("✅ Turnstile 验证已通过")
+                self.log("Turnstile OK")
                 return True
 
         except Exception as e:
-            self.log(f"❌ Turnstile 处理异常: {e}")
+            self.log(f"Turnstile 异常: {e}")
             return False
 
     def fill_password(self):
         """填写密码"""
         try:
-            self.log("🔐 正在填写密码...")
-
-            # 先尝试直接找密码框
             element_config = self.selectors['password_input']
             element, selector = self.smart_wait_for_element(element_config, timeout=5000)
 
-            # 如果找不到密码框，可能有 Turnstile 挡着
             if not element:
-                self.log("⚠️ 密码框未出现，尝试解决 Turnstile...")
+                self.log("密码框未出现，检查 Turnstile...")
                 if self.solve_turnstile_if_present():
-                    # Turnstile 解决后需要重新点击 Continue 提交表单
-                    self.log("🔄 Turnstile 已解决，重新点击 Continue...")
                     self.smart_click('continue_button')
                     time.sleep(5)
                 else:
                     return False
 
-            # 智能填写密码
             if not self.smart_fill('password_input', self.password):
                 return False
-
-            # 智能点击提交按钮
             if not self.smart_click('submit_button'):
                 return False
 
-            # 提交后也可能有 Turnstile
             time.sleep(2)
             self.solve_turnstile_if_present()
-
-            self.log("✅ 密码填写完成")
             return True
 
         except Exception as e:
-            self.log(f"❌ 填写密码失败: {e}")
+            self.log(f"密码填写失败: {e}")
             return False
 
     def run_registration(self):
-        """运行完整的智能注册流程"""
+        """运行注册流程"""
         try:
-            self.log("🚀 开始智能注册流程...")
-
             if not self.navigate_to_signup():
-                raise Exception("导航到注册页面失败")
-
+                raise Exception("导航失败")
             if not self.fill_registration_form():
-                raise Exception("填写注册表单失败")
-
+                raise Exception("表单失败")
             if not self.fill_password():
-                raise Exception("填写密码失败")
-
-            self.log("🎉 智能注册流程完成!")
+                raise Exception("密码失败")
             return True
-
         except Exception as e:
-            self.log(f"❌ 智能注册流程失败: {e}")
+            self.log(f"注册失败: {e}")
             return False
 
     def run_complete_automation(self):
-        """运行完整的智能自动化流程：注册 + 邮件验证 + API key获取"""
+        """完整流程：注册 + 验证 + 获取 Key"""
         try:
-            self.log("🚀 开始完整的智能自动化流程...")
-
-            # 步骤1: 注册账户
-            self.log("📋 步骤1: 智能注册账户...")
+            self.log("开始注册流程...")
             if not self.run_registration():
-                raise Exception("注册流程失败")
+                raise Exception("注册失败")
 
-            # 步骤2: 邮件验证和登录
-            self.log("📋 步骤2: 邮件验证和登录...")
+            self.log("等待验证邮件...")
             api_key = self.handle_email_verification_and_login()
 
             if api_key:
-                self.log(f"🎉 完整自动化流程成功完成!")
-                self.log(f"📧 注册邮箱: {self.email}")
-                self.log(f"🔐 密码: {self.password}")
-                self.log(f"🔑 API Key: {api_key}")
-
-                # 保存API key
+                self.log(f"完成 Key: {api_key[:24]}...")
                 save_api_key(self.email, api_key, self.password)
                 return api_key
             else:
-                raise Exception("邮件验证或API key获取失败")
+                raise Exception("验证或获取 Key 失败")
 
         except Exception as e:
-            self.log(f"❌ 完整自动化流程失败: {e}")
+            self.log(f"流程失败: {e}")
             return None
 
     def handle_email_verification_and_login(self):
         """处理邮件验证和登录，返回API key"""
         try:
-            self.log("📧 通过邮箱后端查询验证邮件...")
-
-            # 通过 provider 轮询验证邮件
             verification_link = self.provider.check_for_verification_email(self.email)
-
             if not verification_link:
                 raise Exception("未找到验证邮件")
 
-            self.log(f"✅ 找到验证链接: {verification_link}")
-
-            # 在当前浏览器中访问验证链接
-            self.log("🔗 在浏览器中访问验证链接...")
+            self.log("访问验证链接...")
             self.page.goto(verification_link, wait_until='domcontentloaded', timeout=60000)
             try:
                 self.page.wait_for_load_state('networkidle', timeout=15000)
@@ -556,25 +470,21 @@ class IntelligentTavilyAutomation:
             page_content = self.page.content().lower()
 
             if "login" in current_url.lower() or "sign in" in page_content:
-                self.log("🔑 需要登录 Tavily 账户...")
+                self.log("需要登录...")
                 if not self.login_to_tavily():
-                    raise Exception("Tavily 登录失败")
-                self.log("✅ Tavily 登录成功!")
+                    raise Exception("登录失败")
 
-            # 获取 API key
-            self.log("🔑 获取 API key...")
+            self.log("获取 API Key...")
             api_key = self.get_api_key()
 
             if api_key:
-                self.log(f"🎉 成功获取 API key: {api_key}")
-                # 清理邮件
                 self.provider.cleanup(self.email)
                 return api_key
             else:
-                raise Exception("未能获取 API key")
+                raise Exception("未能获取 API Key")
 
         except Exception as e:
-            self.log(f"❌ 邮件验证和登录失败: {e}")
+            self.log(f"验证失败: {e}")
             return None
 
     def login_to_tavily(self):
@@ -594,14 +504,13 @@ class IntelligentTavilyAutomation:
             time.sleep(3)
             return True
         except Exception as e:
-            self.log(f"❌ 登录失败: {e}")
+            self.log(f"登录失败: {e}")
             return False
 
     def get_api_key(self):
         """从 Tavily 仪表板获取 API key"""
         try:
             import re
-            # 尝试直接导航到 API key 页面
             self.page.goto("https://app.tavily.com/home", wait_until='domcontentloaded', timeout=60000)
             try:
                 self.page.wait_for_load_state('networkidle', timeout=15000)
@@ -635,9 +544,9 @@ class IntelligentTavilyAutomation:
                 except:
                     continue
 
-            self.log("⚠️ 未在页面中找到 API key")
+            self.log("页面中未找到 API Key")
             return None
 
         except Exception as e:
-            self.log(f"❌ 获取 API key 失败: {e}")
+            self.log(f"获取 Key 失败: {e}")
             return None

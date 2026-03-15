@@ -17,10 +17,10 @@ lock = threading.Lock()
 success_count = 0
 fail_count = 0
 
-# 全局速率控制：每次注册前必须等上一次启动后 N 秒
+# 全局速率控制
 rate_lock = threading.Lock()
 last_start_time = 0
-COOLDOWN = 45  # 两次注册启动间隔（秒）
+COOLDOWN = 45
 
 
 def detect_backends():
@@ -42,32 +42,31 @@ def detect_backends():
 def choose_backend(backends):
     """选择邮箱后端"""
     if len(backends) == 0:
-        print("❌ 未配置任何邮箱后端，请先编辑 config.py")
+        print("  [!] 未配置任何邮箱后端，请先编辑 config.py")
         sys.exit(1)
     if len(backends) == 1:
-        print(f"📮 邮箱后端: {backends[0]['label']}")
+        print(f"  邮箱后端  {backends[0]['label']}")
         return backends[0]['name']
 
-    print("📮 可用邮箱后端:")
+    print("  可用邮箱后端:")
     for i, b in enumerate(backends, 1):
-        print(f"  {i}. {b['label']}")
+        print(f"    {i}. {b['label']}")
     while True:
-        choice = input(f"选择 (默认 1): ").strip()
+        choice = input("  选择 (默认 1): ").strip()
         if choice == '':
             return backends[0]['name']
         if choice.isdigit() and 1 <= int(choice) <= len(backends):
             return backends[int(choice) - 1]['name']
-        print("❌ 无效选择")
+        print("  [!] 无效选择")
 
 
 def wait_for_cooldown():
-    """全局速率控制，确保两次注册启动间隔足够"""
+    """全局速率控制"""
     global last_start_time
     with rate_lock:
         now = time.time()
         wait = COOLDOWN - (now - last_start_time)
         if wait > 0:
-            # 加点随机抖动
             wait += random.uniform(0, 10)
             time.sleep(wait)
         last_start_time = time.time()
@@ -77,11 +76,10 @@ def register_one(task_id, total, provider_name):
     """单个注册任务"""
     global success_count, fail_count
 
-    # 等待冷却
     wait_for_cooldown()
 
     with lock:
-        print(f"🔄 [{task_id}/{total}] 开始注册...")
+        print(f"\n  [{task_id}/{total}] 开始注册...")
 
     automation = None
     try:
@@ -97,17 +95,17 @@ def register_one(task_id, total, provider_name):
         with lock:
             if api_key:
                 success_count += 1
-                print(f"✅ [{task_id}/{total}] 成功 | {automation.email} | {api_key[:20]}... | {elapsed:.0f}s")
+                print(f"  [{task_id}/{total}] OK  {automation.email}  {api_key[:24]}...  {elapsed:.0f}s")
             else:
                 fail_count += 1
-                print(f"❌ [{task_id}/{total}] 失败 | {elapsed:.0f}s")
+                print(f"  [{task_id}/{total}] FAIL  {elapsed:.0f}s")
 
         return api_key
 
     except Exception as e:
         with lock:
             fail_count += 1
-            print(f"❌ [{task_id}/{total}] 出错: {e}")
+            print(f"  [{task_id}/{total}] ERR  {e}")
         return None
     finally:
         if automation:
@@ -120,22 +118,30 @@ def register_one(task_id, total, provider_name):
 def main():
     global success_count, fail_count
 
-    print("🚀 Tavily API Key 自动注册工具")
-    print("=" * 50)
-    print(f"🔐 验证码: {CAPTCHA_SOLVER}")
+    print()
+    print("  ╔══════════════════════════════════════════╗")
+    print("  ║       Tavily Key Auto-Register           ║")
+    print("  ╚══════════════════════════════════════════╝")
+    print()
 
     backends = detect_backends()
     provider_name = choose_backend(backends)
 
-    count_input = input(f"\n📊 注册数量 (默认 10): ").strip()
+    solver_label = {"browser": "Browser (免费)", "capsolver": "CapSolver (API)", "turnstile-solver": "Turnstile-Solver"}
+    print(f"  验证码    {solver_label.get(CAPTCHA_SOLVER, CAPTCHA_SOLVER)}")
+    print(f"  密码模式  {'固定' if config.DEFAULT_PASSWORD else '随机生成'}")
+    print()
+
+    count_input = input("  注册数量 (默认 10): ").strip()
     count = int(count_input) if count_input.isdigit() and int(count_input) > 0 else 10
 
-    threads_input = input(f"🧵 并行线程 (默认 2): ").strip()
+    threads_input = input("  并行线程 (默认 2): ").strip()
     threads = int(threads_input) if threads_input.isdigit() and int(threads_input) > 0 else 2
     threads = min(threads, count)
 
-    print(f"\n📋 配置: {count} 个账户 / {threads} 线程 / 间隔 {COOLDOWN}s")
-    print(f"🚀 开始注册...\n")
+    print()
+    print(f"  ── 开始注册 ──────────────────────────────")
+    print(f"  目标 {count} 个 | 线程 {threads} | 间隔 {COOLDOWN}s")
 
     success_count = 0
     fail_count = 0
@@ -147,11 +153,11 @@ def main():
             pass
 
     elapsed = time.time() - start_time
-    print(f"\n{'=' * 50}")
-    print(f"🎉 全部完成! 耗时 {elapsed:.0f}s")
-    print(f"📊 成功 {success_count}/{count} | 失败 {fail_count}/{count}")
-    print(f"📄 Key 已保存: api_keys.md + api_keys.txt")
-    print(f"{'=' * 50}")
+    print()
+    print(f"  ── 完成 ──────────────────────────────────")
+    print(f"  耗时 {elapsed:.0f}s | 成功 {success_count} | 失败 {fail_count}")
+    print(f"  保存 api_keys.md + api_keys.txt")
+    print()
 
 
 if __name__ == "__main__":

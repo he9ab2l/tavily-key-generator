@@ -47,11 +47,7 @@ def save_api_key(email, api_key, password=None):
     with open(API_KEYS_TXT, 'a', encoding='utf-8') as f:
         f.write(api_key + "\n")
 
-    print(f"✅ 账户信息已保存")
-    print(f"   📧 邮箱: {email}")
-    print(f"   🔐 密码: {pwd}")
-    print(f"   🔑 API Key: {api_key}")
-    print(f"   📄 MD: {API_KEYS_FILE} | TXT: {API_KEYS_TXT}")
+    print(f"  [saved] {email} | {api_key[:24]}...")
 
     # 自动上传到 Proxy
     upload_to_proxy(api_key, email)
@@ -79,11 +75,11 @@ def upload_to_proxy(api_key, email=""):
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status == 200:
-                print(f"   ☁️ 已自动上传到 Proxy ({PROXY_URL})")
+                print(f"  [proxy] 已上传")
             else:
-                print(f"   ⚠️ Proxy 上传失败: HTTP {resp.status}")
+                print(f"  [proxy] 上传失败: HTTP {resp.status}")
     except Exception as e:
-        print(f"   ⚠️ Proxy 上传失败: {e}")
+        print(f"  [proxy] 上传失败: {e}")
 
 
 def wait_with_message(seconds, message="等待中"):
