@@ -5,6 +5,8 @@
 """
 import time
 import re
+import string
+import random
 try:
     from patchright.sync_api import sync_playwright
 except ImportError:
@@ -14,13 +16,33 @@ from utils import save_api_key
 from email_providers import create_email_provider
 
 
+def generate_random_password(length=16):
+    """生成随机强密码：包含大小写字母、数字和特殊字符"""
+    upper = string.ascii_uppercase
+    lower = string.ascii_lowercase
+    digits = string.digits
+    special = "!@#$%&*"
+    # 保证每种字符至少一个
+    password = [
+        random.choice(upper),
+        random.choice(lower),
+        random.choice(digits),
+        random.choice(special),
+    ]
+    # 剩余随机填充
+    all_chars = upper + lower + digits + special
+    password += [random.choice(all_chars) for _ in range(length - 4)]
+    random.shuffle(password)
+    return ''.join(password)
+
+
 class IntelligentTavilyAutomation:
     def __init__(self):
         self.playwright = None
         self.browser = None
         self.page = None
         self.email = None
-        self.password = DEFAULT_PASSWORD
+        self.password = DEFAULT_PASSWORD if DEFAULT_PASSWORD else generate_random_password()
         self.debug = True
         self.email_prefix = None  # 动态邮箱前缀
         self.headless_mode = None  # 记住headless设置
@@ -353,11 +375,11 @@ class IntelligentTavilyAutomation:
 
             if CAPTCHA_SOLVER == "browser":
                 # 免费模式：浏览器内点击复选框
-                from browser_solver import solve_turnstile_browser
+                from solvers.browser_solver import solve_turnstile_browser
                 return solve_turnstile_browser(self.page)
             elif CAPTCHA_SOLVER == "turnstile-solver":
                 # 本地 Turnstile-Solver API
-                from turnstile_api_solver import solve_turnstile_via_api, extract_sitekey_from_page, inject_turnstile_token
+                from solvers.turnstile_api_solver import solve_turnstile_via_api, extract_sitekey_from_page, inject_turnstile_token
 
                 sitekey = extract_sitekey_from_page(self.page)
                 if not sitekey:
@@ -386,7 +408,7 @@ class IntelligentTavilyAutomation:
                 return True
             else:
                 # 付费模式：CapSolver API
-                from capsolver_solver import solve_turnstile, extract_turnstile_sitekey, inject_turnstile_token
+                from solvers.capsolver_solver import solve_turnstile, extract_turnstile_sitekey, inject_turnstile_token
 
                 sitekey = extract_turnstile_sitekey(self.page)
                 if not sitekey:

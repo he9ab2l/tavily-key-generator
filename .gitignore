@@ -48,6 +48,7 @@ Thumbs.db
 config.py
 .env
 api_keys.md
+api_keys.txt
 results.json
 *.png
 *.jpg

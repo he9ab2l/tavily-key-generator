@@ -1,28 +1,57 @@
 """
 工具函数
 """
+import os
 import time
 from datetime import datetime
-from config import API_KEYS_FILE
+from config import API_KEYS_FILE, API_KEYS_TXT
+
+
+def _init_md_file(filepath):
+    """初始化 md 文件，写入表头"""
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write("# Tavily API Keys\n\n")
+        f.write("| # | 邮箱 | 密码 | API Key | 时间 |\n")
+        f.write("|---|------|------|---------|------|\n")
+
+
+def _count_md_rows(filepath):
+    """统计 md 文件中已有的数据行数"""
+    if not os.path.exists(filepath):
+        return 0
+    count = 0
+    with open(filepath, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("|") and not line.startswith("| #") and not line.startswith("|---"):
+                count += 1
+    return count
 
 
 def save_api_key(email, api_key, password=None):
-    """保存API key和账户信息到文件，并自动上传到 Proxy"""
+    """保存 API key：双重保存（md 表格 + txt 纯 key），并自动上传到 Proxy"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    account_line = f"{email},{password if password else 'N/A'},{api_key},{timestamp};\n"
+    pwd = password if password else "N/A"
 
-    try:
-        with open(API_KEYS_FILE, 'a', encoding='utf-8') as f:
-            f.write(account_line)
-    except FileNotFoundError:
-        with open(API_KEYS_FILE, 'w', encoding='utf-8') as f:
-            f.write(account_line)
+    # ── 1. 保存到 md 文件（表格格式） ──
+    if not os.path.exists(API_KEYS_FILE) or os.path.getsize(API_KEYS_FILE) == 0:
+        _init_md_file(API_KEYS_FILE)
 
-    print(f"✅ 账户信息已保存到 {API_KEYS_FILE}")
-    print(f"📧 邮箱: {email}")
-    print(f"🔐 密码: {password if password else 'N/A'}")
-    print(f"🔑 API Key: {api_key}")
-    print(f"⏰ 时间: {timestamp}")
+    row_num = _count_md_rows(API_KEYS_FILE) + 1
+    md_line = f"| {row_num} | {email} | {pwd} | `{api_key}` | {timestamp} |\n"
+
+    with open(API_KEYS_FILE, 'a', encoding='utf-8') as f:
+        f.write(md_line)
+
+    # ── 2. 保存到 txt 文件（一行一个 key） ──
+    with open(API_KEYS_TXT, 'a', encoding='utf-8') as f:
+        f.write(api_key + "\n")
+
+    print(f"✅ 账户信息已保存")
+    print(f"   📧 邮箱: {email}")
+    print(f"   🔐 密码: {pwd}")
+    print(f"   🔑 API Key: {api_key}")
+    print(f"   📄 MD: {API_KEYS_FILE} | TXT: {API_KEYS_TXT}")
 
     # 自动上传到 Proxy
     upload_to_proxy(api_key, email)
@@ -50,11 +79,11 @@ def upload_to_proxy(api_key, email=""):
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status == 200:
-                print(f"☁️ 已自动上传到 Proxy ({PROXY_URL})")
+                print(f"   ☁️ 已自动上传到 Proxy ({PROXY_URL})")
             else:
-                print(f"⚠️ Proxy 上传失败: HTTP {resp.status}")
+                print(f"   ⚠️ Proxy 上传失败: HTTP {resp.status}")
     except Exception as e:
-        print(f"⚠️ Proxy 上传失败: {e}")
+        print(f"   ⚠️ Proxy 上传失败: {e}")
 
 
 def wait_with_message(seconds, message="等待中"):

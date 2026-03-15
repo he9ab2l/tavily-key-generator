@@ -28,8 +28,9 @@ CAPSOLVER_API_KEY = ""      # 从 capsolver.com 获取
 TURNSTILE_SOLVER_URL = "http://127.0.0.1:5000"  # 本地 Turnstile-Solver 地址
 
 # ═══ 注册配置 ═══
-DEFAULT_PASSWORD = "TavilyAuto123!"
+DEFAULT_PASSWORD = ""  # 留空则每次自动生成随机密码
 API_KEYS_FILE = "api_keys.md"
+API_KEYS_TXT = "api_keys.txt"  # 纯 Key 文件（一行一个）
 
 # ═══ 等待时间（秒） ═══
 WAIT_TIME_SHORT = 2
