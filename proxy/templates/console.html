@@ -144,13 +144,14 @@ textarea { min-height: 80px; resize: vertical; }
       <input type="text" id="single-key" placeholder="tvly-xxx" style="max-width:360px">
       <button class="btn btn-primary" onclick="addSingleKey()">添加</button>
       <button class="btn" onclick="document.getElementById('import-area').classList.toggle('hidden')">批量导入</button>
+      <button class="btn" id="test-all-btn" onclick="testAllKeys()">全部测试</button>
     </div>
     <div id="import-area" class="hidden" style="margin-bottom:12px">
       <textarea id="import-text" placeholder="粘贴 api_keys.md 内容，每行一条&#10;格式: email,password,tvly-xxx,timestamp;"></textarea>
       <button class="btn btn-primary mt" onclick="importKeys()">导入</button>
     </div>
     <div style="overflow-x:auto">
-      <table id="keys-table"><thead><tr><th>ID</th><th>Key</th><th>邮箱</th><th>成功</th><th>失败</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table>
+      <table id="keys-table"><thead><tr><th>ID</th><th>Key</th><th>邮箱</th><th>成功</th><th>失败</th><th>状态</th><th>测试</th><th>操作</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
@@ -294,13 +295,14 @@ curl -X POST <span class="string">${baseUrl}/api/search</span> \\
   ktbody.innerHTML = '';
   for (const k of keysData.keys) {
     const active = k.active === 1;
-    ktbody.innerHTML += `<tr>
+    ktbody.innerHTML += `<tr id="key-row-${k.id}">
       <td>${k.id}</td>
       <td class="mono">${k.key_masked}</td>
       <td style="font-size:12px">${k.email||'-'}</td>
       <td>${k.total_used}</td>
       <td>${k.total_failed}</td>
       <td><span class="tag ${active?'tag-ok':'tag-off'}">${active?'正常':'禁用'}</span></td>
+      <td><span id="test-${k.id}"><button class="btn btn-sm" onclick="testKey(${k.id})">测试</button></span></td>
       <td>
         <button class="btn btn-sm" onclick="toggleKey(${k.id},${active?0:1})">${active?'禁用':'启用'}</button>
         <button class="btn btn-sm btn-danger" onclick="delKey(${k.id})">删除</button>
@@ -338,6 +340,49 @@ async function importKeys() {
 
 async function delKey(id) { if(confirm('确认删除？')){ await api('DELETE', `/api/keys/${id}`); refresh(); } }
 async function toggleKey(id, active) { await api('PUT', `/api/keys/${id}/toggle`, { active }); refresh(); }
+
+async function testKey(id) {
+  const el = document.getElementById(`test-${id}`);
+  el.innerHTML = '<span style="color:#888;font-size:12px">测试中...</span>';
+  try {
+    const r = await api('POST', `/api/keys/${id}/test`);
+    if (r.ok) {
+      el.innerHTML = '<span class="tag tag-ok">可用</span>';
+    } else {
+      el.innerHTML = `<span class="tag tag-off" title="${r.msg}">不可用</span>`;
+    }
+  } catch(e) {
+    el.innerHTML = '<span class="tag tag-off">错误</span>';
+  }
+}
+
+async function testAllKeys() {
+  const btn = document.getElementById('test-all-btn');
+  btn.disabled = true;
+  btn.textContent = '测试中...';
+  // 先把所有测试列清为等待状态
+  document.querySelectorAll('[id^="test-"]').forEach(el => {
+    el.innerHTML = '<span style="color:#aaa;font-size:12px">等待...</span>';
+  });
+  try {
+    const r = await api('POST', '/api/keys/test-all');
+    for (const item of r.results) {
+      const el = document.getElementById(`test-${item.id}`);
+      if (!el) continue;
+      if (item.ok) {
+        el.innerHTML = '<span class="tag tag-ok">可用</span>';
+      } else {
+        el.innerHTML = `<span class="tag tag-off" title="${item.msg}">不可用</span>`;
+      }
+    }
+    btn.textContent = `测试完成 (${r.ok}/${r.total})`;
+    setTimeout(() => { btn.textContent = '全部测试'; btn.disabled = false; }, 3000);
+  } catch(e) {
+    btn.textContent = '全部测试';
+    btn.disabled = false;
+    alert('测试失败: ' + e.message);
+  }
+}
 
 async function changePwd() {
   const newPwd = document.getElementById('new-pwd').value.trim();

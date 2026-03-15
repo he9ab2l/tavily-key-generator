@@ -168,6 +168,64 @@ async def toggle_key(key_id: int, request: Request, _=Depends(verify_admin)):
     return {"ok": True}
 
 
+@app.post("/api/keys/{key_id}/test")
+async def test_single_key(key_id: int, _=Depends(verify_admin)):
+    """测试单个 Key 是否可用"""
+    conn = db.get_conn()
+    try:
+        row = conn.execute("SELECT * FROM api_keys WHERE id = ?", (key_id,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Key not found")
+
+    result = await _test_key(row["key"])
+    # 失败则标记
+    if not result["ok"]:
+        db.update_key_usage(key_id, False)
+        pool.reload()
+    return result
+
+
+@app.post("/api/keys/test-all")
+async def test_all_keys(_=Depends(verify_admin)):
+    """测试所有活跃 Key"""
+    keys = db.get_all_keys()
+    results = []
+    ok_count = 0
+    fail_count = 0
+    for k in keys:
+        r = await _test_key(k["key"])
+        r["id"] = k["id"]
+        r["key_masked"] = k["key"][:8] + "***" + k["key"][-4:]
+        results.append(r)
+        if r["ok"]:
+            ok_count += 1
+        else:
+            fail_count += 1
+            db.update_key_usage(k["id"], False)
+    if fail_count:
+        pool.reload()
+    return {"results": results, "ok": ok_count, "fail": fail_count, "total": len(keys)}
+
+
+async def _test_key(api_key: str) -> dict:
+    """用最小请求测试 Tavily Key"""
+    try:
+        resp = await http_client.post(
+            f"{TAVILY_API_BASE}/search",
+            json={"api_key": api_key, "query": "test", "max_results": 1},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            return {"ok": True, "status": 200, "msg": "可用"}
+        else:
+            body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            return {"ok": False, "status": resp.status_code, "msg": body.get("detail", resp.text[:100])}
+    except Exception as e:
+        return {"ok": False, "status": 0, "msg": str(e)[:100]}
+
+
 @app.get("/api/tokens")
 async def list_tokens(request: Request, _=Depends(verify_admin)):
     tokens = [dict(t) for t in db.get_all_tokens()]
