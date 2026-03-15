@@ -355,6 +355,7 @@ function logout() {
   localStorage.removeItem('tavily_proxy_pwd');
   document.getElementById('login-box').classList.remove('hidden');
   document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('pwd-modal').classList.add('hidden');
 }
 
 // ── Page navigation ──
@@ -709,7 +710,14 @@ if (PWD) {
     document.getElementById('login-box').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
     refresh();
-  }).catch(() => {});
+  }).catch(() => {
+    // 缓存密码失效, 清除并显示登录页
+    PWD = '';
+    localStorage.removeItem('tavily_proxy_pwd');
+    document.getElementById('login-box').classList.remove('hidden');
+    document.getElementById('dashboard').classList.add('hidden');
+    document.getElementById('pwd-modal').classList.add('hidden');
+  });
 }
 </script>
 </body>
