@@ -299,8 +299,14 @@ class TavilyAutomation:
             if not self.solve_turnstile_if_present():
                 log.warn("[reg] turnstile failed, trying to continue...")
 
-            if not self.smart_click('continue_button'):
-                return False
+            # 用 Enter 键提交而非点击 Continue (避免元素遮挡)
+            log.info("[reg] submitting email form...")
+            self.page.keyboard.press("Enter")
+            time.sleep(2)
+            try:
+                self.page.wait_for_load_state('networkidle', timeout=10000)
+            except Exception:
+                pass
 
             return True
         except Exception as e:
@@ -380,10 +386,15 @@ class TavilyAutomation:
             if not self.smart_fill('password_input', self.password):
                 return False
 
-            if not self.smart_click('submit_button'):
-                return False
-
+            # 用 Enter 提交密码表单
+            log.info("[reg] submitting password form...")
+            self.page.keyboard.press("Enter")
             time.sleep(2)
+            try:
+                self.page.wait_for_load_state('networkidle', timeout=10000)
+            except Exception:
+                pass
+
             self.solve_turnstile_if_present()
             return True
 
