@@ -193,22 +193,19 @@ class TavilyAutomation:
                     element.wait_for_element_state('visible', timeout=5000)
                     element.wait_for_element_state('stable', timeout=5000)
                     element.click()
-                    time.sleep(0.5)
+                    time.sleep(1)
                     try:
-                        self.page.wait_for_load_state('networkidle', timeout=5000)
+                        self.page.wait_for_load_state('networkidle', timeout=10000)
                     except Exception:
                         pass
                     return True
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.warn(f"[reg] click {element_name} failed: {e}")
 
+            # 失败后等待而非 reload (避免页面跳动)
             if attempt < retries - 1:
-                self.page.reload(wait_until='domcontentloaded')
-                try:
-                    self.page.wait_for_load_state('networkidle', timeout=5000)
-                except Exception:
-                    pass
-                time.sleep(1)
+                log.info(f"[reg] retry click {element_name} ({attempt+2}/{retries})...")
+                time.sleep(3)
 
         return False
 
@@ -226,20 +223,17 @@ class TavilyAutomation:
                     element.wait_for_element_state('editable', timeout=5000)
                     element.fill('')
                     element.fill(text)
-                    time.sleep(0.5)
+                    time.sleep(1)
                     filled_value = element.input_value()
                     if filled_value == text:
                         return True
-                except Exception:
-                    pass
+                    log.warn(f"[reg] fill verify failed: expected '{text[:20]}', got '{filled_value[:20]}'")
+                except Exception as e:
+                    log.warn(f"[reg] fill {element_name} failed: {e}")
 
             if attempt < retries - 1:
-                self.page.reload(wait_until='domcontentloaded')
-                try:
-                    self.page.wait_for_load_state('networkidle', timeout=5000)
-                except Exception:
-                    pass
-                time.sleep(1)
+                log.info(f"[reg] retry fill {element_name} ({attempt+2}/{retries})...")
+                time.sleep(3)
 
         return False
 
@@ -256,7 +250,7 @@ class TavilyAutomation:
                 "&screen_hint=signup"
             )
             self.page.goto(auth_url, wait_until='domcontentloaded', timeout=60000)
-            time.sleep(2)
+            time.sleep(3)
 
             if "auth.tavily.com" in self.page.url:
                 return True
@@ -302,7 +296,7 @@ class TavilyAutomation:
         """检测并解决 Turnstile"""
         try:
             log.info("[reg] checking turnstile...")
-            time.sleep(2)
+            time.sleep(3)
 
             if CAPTCHA_SOLVER == "browser":
                 from solvers.browser_solver import solve_turnstile_browser
@@ -354,15 +348,17 @@ class TavilyAutomation:
         """填写密码"""
         try:
             log.info("[reg] filling password...")
+            # 等待页面过渡到密码页
+            time.sleep(3)
 
             element_config = self.selectors['password_input']
-            element, selector = self.smart_wait_for_element(element_config, timeout=5000)
+            element, selector = self.smart_wait_for_element(element_config, timeout=10000)
 
             if not element:
                 log.info("[reg] password field not found, solving turnstile...")
                 if self.solve_turnstile_if_present():
                     self.smart_click('continue_button')
-                    time.sleep(3)
+                    time.sleep(5)
                 else:
                     return False
 
@@ -372,7 +368,7 @@ class TavilyAutomation:
             if not self.smart_click('submit_button'):
                 return False
 
-            time.sleep(1)
+            time.sleep(2)
             self.solve_turnstile_if_present()
             return True
 
