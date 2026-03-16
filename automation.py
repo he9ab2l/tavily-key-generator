@@ -192,7 +192,22 @@ class TavilyAutomation:
                 try:
                     element.wait_for_element_state('visible', timeout=5000)
                     element.wait_for_element_state('stable', timeout=5000)
-                    element.click()
+
+                    # 先点空白处让其他元素失焦, 避免遮挡
+                    try:
+                        self.page.mouse.click(0, 0)
+                        time.sleep(0.3)
+                    except Exception:
+                        pass
+
+                    # 尝试普通点击
+                    try:
+                        element.click(timeout=5000)
+                    except Exception:
+                        # 被遮挡时用 force 点击
+                        log.info(f"[reg] {element_name} intercepted, force clicking...")
+                        element.click(force=True)
+
                     time.sleep(1)
                     try:
                         self.page.wait_for_load_state('networkidle', timeout=10000)
